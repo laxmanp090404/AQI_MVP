@@ -1,45 +1,55 @@
-from flask import Flask, request, jsonify
+from flask import Flask,request,jsonify
+from flask_cors import CORS
 import joblib
 import pandas as pd
-import numpy as np
-from flask_cors import CORS
 
-app = Flask(__name__)
+from feature_engineering import fetch_city_data,build_features
+from aqi_utils import pm25_to_aqi,get_category
+
+app=Flask(__name__)
 CORS(app)
 
-# Load Models and Weights
-xgb_model = joblib.load('models/final_model_xgb.pkl')
-lgb_model = joblib.load('models/final_model_lgb.pkl')
-cat_model = joblib.load('models/final_model_cat.pkl')
-weights = joblib.load('models/ensemble_weights.pkl')
+xgb=joblib.load("models/final_model_xgb.pkl")
+lgb=joblib.load("models/final_model_lgb.pkl")
+cat=joblib.load("models/final_model_cat.pkl")
+weights=joblib.load("models/ensemble_weights.pkl")
 
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict():
-    try:
-        data = request.get_json()
-        input_df = pd.DataFrame([data])
-        
-        # Align features with the 59 training features
-        model_features = cat_model.feature_names_
-        for col in model_features:
-            if col not in input_df.columns:
-                input_df[col] = 0
-        
-        input_df = input_df[model_features]
-        
-        # Ensemble Prediction
-        p_cat = cat_model.predict(input_df)[0]
-        p_xgb = xgb_model.predict(input_df)[0]
-        p_lgb = lgb_model.predict(input_df)[0]
-        
-        final_aqi = (weights[0] * p_cat) + (weights[1] * p_xgb) + (weights[2] * p_lgb)
-        
-        return jsonify({
-            'prediction': round(float(max(0, final_aqi)), 2),
-            'status': 'success'
-        })
-    except Exception as e:
-        return jsonify({'error': str(e), 'status': 'fail'}), 400
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    try:
+
+        city = request.json["city_name"]
+
+        df = fetch_city_data(city)
+
+        features = build_features(city, df)
+
+        X = pd.DataFrame([features])
+        X = X.reindex(columns=xgb.feature_names_in_, fill_value=0)
+
+        p1 = cat.predict(X)[0]
+        p2 = xgb.predict(X)[0]
+        p3 = lgb.predict(X)[0]
+
+        pm25 = (weights[0]*p1)+(weights[1]*p2)+(weights[2]*p3)
+
+        aqi = pm25_to_aqi(pm25)
+        category,color = get_category(aqi)
+
+        return jsonify({
+            "city":city,
+            "predicted_pm25":round(float(pm25),2),
+            "aqi":round(float(aqi),2),
+            "category":category,
+            "color":color
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error":"Data temporarily unavailable",
+            "details":str(e)
+        }),500
+if __name__=="__main__":
+    app.run(host="0.0.0.0",port=5000)
