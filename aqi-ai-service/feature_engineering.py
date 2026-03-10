@@ -60,6 +60,10 @@ def fetch_city_data(city):
 
     # ---------- CONVERT TIME ----------
     df["time"] = pd.to_datetime(df["time"])
+    
+    # ---------- CONVERT DATA TYPES ----------
+    cols = ["pm25","temp","hum","wind","press","rain"]
+    df[cols] = df[cols].astype(float)
 
     # ---------- HOURLY → DAILY ----------
     df = df.resample("D", on="time").mean().dropna()
@@ -70,14 +74,14 @@ def build_features(city,df):
     f={}
 
     for i in range(1,8):
-        f[f"PM2.5_lag_{i}"]=df["pm25"].iloc[-i]
+        f[f"PM2.5_lag_{i}"]=round(df["pm25"].iloc[-i], 2)
 
     for i in range(1,4):
-        f[f"Temperature_lag_{i}"]=df["temp"].iloc[-i]
-        f[f"Humidity_lag_{i}"]=df["hum"].iloc[-i]
-        f[f"Wind_Speed_lag_{i}"]=df["wind"].iloc[-i]
-        f[f"Pressure_lag_{i}"]=df["press"].iloc[-i]
-        f[f"Rainfall_lag_{i}"]=df["rain"].iloc[-i]
+        f[f"Temperature_lag_{i}"]=round(df["temp"].iloc[-i], 2)
+        f[f"Humidity_lag_{i}"]=round(df["hum"].iloc[-i], 2)
+        f[f"Wind_Speed_lag_{i}"]=round(df["wind"].iloc[-i], 2)
+        f[f"Pressure_lag_{i}"]=round(df["press"].iloc[-i], 2)
+        f[f"Rainfall_lag_{i}"]=round(df["rain"].iloc[-i], 2)
 
     f["PM2.5_roll_mean_7d"] = df["pm25"].tail(7).mean()
     f["PM2.5_roll_std_7d"]  = df["pm25"].tail(7).std()
