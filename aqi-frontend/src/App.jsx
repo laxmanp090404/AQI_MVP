@@ -1,7 +1,29 @@
-export default function App(){
-  return(
-    <h1 className="text-4xl font-bold text-green-600">
-      AQI Dashboard
-    </h1>
-  )
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+
+import Dashboard from "./pages/Dashboard";
+import MapPage from "./pages/MapPage";
+
+export default function App() {
+
+  return (
+    <BrowserRouter>
+
+      <nav className="p-4 flex gap-6 bg-gray-100">
+
+        <Link to="/">Dashboard</Link>
+
+        <Link to="/map">Map</Link>
+
+      </nav>
+
+      <Routes>
+
+        <Route path="/" element={<Dashboard />} />
+
+        <Route path="/map" element={<MapPage />} />
+
+      </Routes>
+
+    </BrowserRouter>
+  );
 }
