@@ -80,5 +80,169 @@ def predict():
             "error":"Data temporarily unavailable",
             "details":str(e)
         }),500
+@app.route("/predictions", methods=["GET"])
+def get_predictions():
+
+    try:
+        results = list(collection.find({}, {
+            "_id":0,
+            "city":1,
+            "aqi":1,
+            "category":1,
+            "color":1,
+            "predicted_pm25":1,
+            "predicted_for":1
+        }))
+
+        # convert datetime for JSON
+        for r in results:
+            r["predicted_for"] = r["predicted_for"].strftime("%Y-%m-%d")
+
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}),500
+
+@app.route("/history/<city>",methods=["GET"])
+def history(city):
+
+    results=list(collection.find(
+        {"city":city},
+        {"_id":0,"aqi":1,"predicted_for":1}
+    ).sort("predicted_for",1))
+
+    for r in results:
+        r["predicted_for"]=r["predicted_for"].strftime("%Y-%m-%d")
+
+    return jsonify(results)
+
+@app.route("/latest-predictions", methods=["GET"])
+def latest_predictions():
+
+    try:
+
+        pipeline = [
+            {
+                "$sort": {"generated_at": -1}
+            },
+            {
+                "$group": {
+                    "_id": "$city",
+                    "doc": {"$first": "$$ROOT"}
+                }
+            },
+            {
+                "$replaceRoot": {"newRoot": "$doc"}
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "city": 1,
+                    "aqi": 1,
+                    "category": 1,
+                    "color": 1,
+                    "predicted_pm25": 1,
+                    "predicted_for": 1
+                }
+            }
+        ]
+
+        results = list(collection.aggregate(pipeline))
+
+        for r in results:
+            r["predicted_for"] = r["predicted_for"].strftime("%Y-%m-%d")
+
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/extensive-report", methods=["GET"])
+def extensive_report():
+
+    try:
+
+        pipeline = [
+            {"$sort": {"generated_at": -1}},
+            {
+                "$group": {
+                    "_id": "$city",
+                    "doc": {"$first": "$$ROOT"}
+                }
+            },
+            {"$replaceRoot": {"newRoot": "$doc"}}
+        ]
+
+        docs = list(collection.aggregate(pipeline))
+
+        report = []
+
+        for d in docs:
+
+            f = d["features"]
+
+            row = {
+
+                "city": d["city"],
+
+                # PM2.5 lags (µg/m³)
+                "pm25_lag_1": round(f["PM2.5_lag_1"],2),
+                "pm25_lag_2": round(f["PM2.5_lag_2"],2),
+                "pm25_lag_3": round(f["PM2.5_lag_3"],2),
+                "pm25_lag_4": round(f["PM2.5_lag_4"],2),
+                "pm25_lag_5": round(f["PM2.5_lag_5"],2),
+                "pm25_lag_6": round(f["PM2.5_lag_6"],2),
+                "pm25_lag_7": round(f["PM2.5_lag_7"],2),
+
+                # Temperature (°C)
+                "temp_lag_1": round(f["Temperature_lag_1"],2),
+                "temp_lag_2": round(f["Temperature_lag_2"],2),
+                "temp_lag_3": round(f["Temperature_lag_3"],2),
+
+                # Humidity (%)
+                "humidity_lag_1": round(f["Humidity_lag_1"],2),
+                "humidity_lag_2": round(f["Humidity_lag_2"],2),
+                "humidity_lag_3": round(f["Humidity_lag_3"],2),
+
+                # Wind speed (m/s)
+                "wind_lag_1": round(f["Wind_Speed_lag_1"],2),
+                "wind_lag_2": round(f["Wind_Speed_lag_2"],2),
+                "wind_lag_3": round(f["Wind_Speed_lag_3"],2),
+
+                # Pressure (hPa)
+                "pressure_lag_1": round(f["Pressure_lag_1"],2),
+                "pressure_lag_2": round(f["Pressure_lag_2"],2),
+                "pressure_lag_3": round(f["Pressure_lag_3"],2),
+
+                # Rainfall (mm)
+                "rain_lag_1": round(f["Rainfall_lag_1"],2),
+                "rain_lag_2": round(f["Rainfall_lag_2"],2),
+                "rain_lag_3": round(f["Rainfall_lag_3"],2),
+
+                # Rolling stats (µg/m³)
+                "pm25_roll_mean": round(f["PM2.5_roll_mean_7d"],2),
+                "pm25_roll_std": round(f["PM2.5_roll_std_7d"],2),
+                "pm25_roll_min": round(f["PM2.5_roll_min_7d"],2),
+                "pm25_roll_max": round(f["PM2.5_roll_max_7d"],2),
+
+                # Temporal
+                "month": f["month"],
+                "day_of_week": f["day_of_week"],
+                "day_of_year": f["day_of_year"],
+                "weekend": f["is_weekend"],
+
+                # Predictions
+                "predicted_pm25": round(d["predicted_pm25"],2),
+                "aqi": round(d["aqi"],2),
+                "category": d["category"]
+            }
+
+            report.append(row)
+
+        return jsonify(report)
+
+    except Exception as e:
+        return jsonify({"error":str(e)}),500
+
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=5000)

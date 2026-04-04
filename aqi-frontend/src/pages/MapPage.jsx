@@ -1,28 +1,57 @@
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { cities } from "../utils/cities";
-import "leaflet/dist/leaflet.css";
+import { MapContainer, TileLayer } from "react-leaflet"
+import { useEffect, useState } from "react"
 
-export default function MapPage() {
+import { cities } from "../utils/cities"
+import { getPredictions } from "../services/api"
 
-  return (
-    <MapContainer center={[22.5, 78.9]} zoom={5} className="h-screen">
+import AQIHeatmap from "../components/AQIHeatMap"
+import AQIMarkers from "../components/AQIMarkers"
+import AQILegend from "../components/AqiLegend"
 
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+import "leaflet/dist/leaflet.css"
 
-      {Object.entries(cities).map(([city, coord]) => (
+export default function MapPage(){
 
-        <Marker key={city} position={coord}>
+ const [data,setData]=useState([])
 
-          <Popup>
+ useEffect(()=>{
 
-            {city}
+  const load=async()=>{
 
-          </Popup>
+   const res=await getPredictions()
 
-        </Marker>
+   setData(res)
 
-      ))}
+  }
 
-    </MapContainer>
-  );
+  load()
+
+ },[])
+
+ return(
+
+ <div className="relative">
+
+ <MapContainer
+  center={[22.5,78.9]}
+  zoom={5}
+  className="h-screen w-full"
+ >
+
+ <TileLayer
+  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+ />
+
+ <AQIHeatmap data={data} cities={cities}/>
+
+ <AQIMarkers data={data} cities={cities}/>
+
+ </MapContainer>
+
+ <AQILegend/>
+
+ </div>
+
+ )
+
 }

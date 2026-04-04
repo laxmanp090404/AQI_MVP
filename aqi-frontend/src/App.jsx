@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 
 import Dashboard from "./pages/Dashboard";
 import MapPage from "./pages/MapPage";
+import ExtensiveReport from "./pages/ExtensiveReport"
 
 export default function App() {
 
@@ -13,6 +14,10 @@ export default function App() {
         <Link to="/">Dashboard</Link>
 
         <Link to="/map">Map</Link>
+        <Link to="/extensive-report">
+ Extensive Report
+</Link>
+
 
       </nav>
 
@@ -21,6 +26,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
 
         <Route path="/map" element={<MapPage />} />
+        <Route path="/extensive-report" element={<ExtensiveReport/>} />
 
       </Routes>
 
