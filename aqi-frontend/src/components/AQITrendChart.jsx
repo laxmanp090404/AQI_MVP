@@ -4,37 +4,34 @@ import {
  XAxis,
  YAxis,
  Tooltip,
- CartesianGrid
+ CartesianGrid,
+ ResponsiveContainer
 } from "recharts"
 
 export default function AQITrendChart({data}){
 
- if(!data) return null
+ if(!data || data.length === 0) return null
 
  return(
 
- <LineChart
-  width={500}
-  height={300}
-  data={data}
- >
-
- <CartesianGrid strokeDasharray="3 3"/>
-
- <XAxis dataKey="predicted_for"/>
-
- <YAxis/>
-
- <Tooltip/>
-
- <Line
-  type="monotone"
-  dataKey="aqi"
-  stroke="#ff7300"
-  strokeWidth={3}
- />
-
- </LineChart>
+ <div className="h-72 w-full">
+  <ResponsiveContainer width="100%" height="100%">
+   <LineChart data={data}>
+    <CartesianGrid strokeDasharray="3 3"/>
+    <XAxis dataKey="predicted_for"/>
+    <YAxis/>
+    <Tooltip/>
+    <Line
+     type="monotone"
+     dataKey="aqi"
+     stroke="#f97316"
+     strokeWidth={3}
+     dot={{ r: 3 }}
+     activeDot={{ r: 6 }}
+    />
+   </LineChart>
+  </ResponsiveContainer>
+ </div>
 
  )
 

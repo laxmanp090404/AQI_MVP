@@ -16,13 +16,18 @@ export default function Dashboard() {
   const [city, setCity] = useState("");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [history, setHistory] = useState([]);
   const [cards, setCards] = useState([]);
 
   // Load latest predictions for cards
   const loadLatest = async () => {
-    const res = await getLatestPredictions();
-    setCards(res);
+    try {
+      const res = await getLatestPredictions();
+      setCards(res);
+    } catch {
+      setError("Could not load latest predictions.");
+    }
   };
 
   useEffect(() => {
@@ -31,8 +36,12 @@ export default function Dashboard() {
 
   // Load history for chart
   const loadHistory = async (city) => {
-    const res = await getHistory(city);
-    setHistory(res);
+    try {
+      const res = await getHistory(city);
+      setHistory(res);
+    } catch {
+      setHistory([]);
+    }
   };
 
   // Handle prediction button
@@ -40,69 +49,107 @@ export default function Dashboard() {
 
     if (!city) return;
 
-    setLoading(true);
+    try {
+      setLoading(true);
+      setError("");
 
-    const result = await predictAQI(city);
+      const result = await predictAQI(city);
+      setData(result);
 
-    setData(result);
-
-    await loadHistory(city);
-
-    await loadLatest(); // refresh cards
-
-    setLoading(false);
+      await loadHistory(city);
+      await loadLatest();
+    } catch {
+      setError("Prediction failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const avgAqi =
+    cards.length > 0
+      ? (cards.reduce((acc, card) => acc + card.aqi, 0) / cards.length).toFixed(1)
+      : "-";
+
+  const moderateOrAbove = cards.filter((card) => card.aqi >= 100).length;
+  const cleanCities = cards.filter((card) => card.aqi < 50).length;
+
   return (
-    <div className="p-10 space-y-10">
+    <div className="min-h-screen bg-gradient-to-b from-cyan-50 via-slate-50 to-emerald-50 p-6 md:p-10">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <section className="rounded-3xl bg-slate-900 p-7 text-white shadow-2xl">
+          <p className="text-sm uppercase tracking-widest text-cyan-300">AQI Command Center</p>
+          <h1 className="mt-2 text-3xl font-bold md:text-4xl">Air Quality Dashboard</h1>
+          <p className="mt-2 max-w-2xl text-slate-200">
+            Forecast city-level AQI, monitor risk signals, and compare the latest PM2.5 trends.
+          </p>
+        </section>
 
-      {/* Prediction Section */}
+        <section className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl bg-white p-5 shadow-lg ring-1 ring-slate-200">
+            <p className="text-sm text-slate-500">Cities Tracked</p>
+            <p className="mt-1 text-3xl font-bold text-slate-900">{cards.length}</p>
+          </div>
+          <div className="rounded-2xl bg-white p-5 shadow-lg ring-1 ring-slate-200">
+            <p className="text-sm text-slate-500">Average AQI</p>
+            <p className="mt-1 text-3xl font-bold text-slate-900">{avgAqi}</p>
+          </div>
+          <div className="rounded-2xl bg-white p-5 shadow-lg ring-1 ring-slate-200">
+            <p className="text-sm text-slate-500">Moderate+ / Good Cities</p>
+            <p className="mt-1 text-3xl font-bold text-slate-900">
+              {moderateOrAbove} / {cleanCities}
+            </p>
+          </div>
+        </section>
 
-      <div className="flex flex-col items-center gap-6">
+        <section className="rounded-3xl bg-white p-6 shadow-xl ring-1 ring-slate-200">
+          <div className="flex flex-col items-start gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Run New Prediction</h2>
+              <p className="text-sm text-slate-500">
+                Choose a city and generate the latest AQI projection.
+              </p>
+            </div>
 
-        <CitySelector city={city} setCity={setCity} />
+            <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center">
+              <CitySelector city={city} setCity={setCity} />
+              <button
+                className="rounded-lg bg-cyan-600 px-6 py-2 font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={handlePredict}
+                disabled={loading || !city}
+              >
+                {loading ? "Predicting..." : "Predict AQI"}
+              </button>
+            </div>
+          </div>
 
-        <button
-          className="bg-green-600 text-white px-6 py-2 rounded"
-          onClick={handlePredict}
-        >
-          Predict AQI
-        </button>
+          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {loading && <Loader />}
+          {!loading && data && (
+            <div className="mt-6 max-w-sm">
+              <PredictionCard data={data} />
+            </div>
+          )}
+        </section>
 
-        {loading && <Loader />}
+        <section>
+          <h2 className="mb-4 text-2xl font-bold text-slate-900">Latest AQI Predictions</h2>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {cards.map((card) => (
+              <PredictionCard key={card.city} data={card} />
+            ))}
+          </div>
+        </section>
 
-        {!loading && data && <PredictionCard data={data} />}
-
+        {history.length > 0 && (
+          <section className="rounded-3xl bg-white p-5 shadow-xl ring-1 ring-slate-200">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-slate-900">AQI Trend for {city}</h2>
+              <p className="text-sm text-slate-500">Historical prediction trend from stored runs.</p>
+            </div>
+            <AQITrendChart data={history} />
+          </section>
+        )}
       </div>
-
-      {/* Latest Predictions Cards */}
-
-      <div>
-
-        <h1 className="text-2xl font-bold mb-6">
-          Latest AQI Predictions
-        </h1>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-          {cards.map(card => (
-            <PredictionCard key={card.city} data={card} />
-          ))}
-
-        </div>
-
-      </div>
-
-      {/* Trend Chart */}
-
-      {/* {history.length > 0 && (
-        <div className="flex justify-center">
-
-          <AQITrendChart data={history} />
-
-        </div>
-      )} */}
-
     </div>
   );
 }
