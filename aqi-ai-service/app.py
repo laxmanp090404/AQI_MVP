@@ -35,7 +35,7 @@ def predict():
         p3 = lgb.predict(X)[0]
 
         pm25 = (weights[0]*p1)+(weights[1]*p2)+(weights[2]*p3)
-
+        # calcualting aqi from PM2.5
         aqi = pm25_to_aqi(pm25)
         category,color = get_category(aqi)
         # remove one-hot city fields before storing

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 import CitySelector from "../components/CitySelecter";
 import PredictionCard from "../components/PredictionCard";
@@ -73,6 +73,14 @@ export default function Dashboard() {
   const moderateOrAbove = cards.filter((card) => card.aqi >= 100).length;
   const cleanCities = cards.filter((card) => card.aqi < 50).length;
 
+  const sortedCards = useMemo(() => {
+    return [...cards].sort((a, b) => {
+      const aTime = a?.predicted_for ? new Date(a.predicted_for).getTime() : 0;
+      const bTime = b?.predicted_for ? new Date(b.predicted_for).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [cards]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-cyan-50 via-slate-50 to-emerald-50 p-6 md:p-10">
       <div className="mx-auto max-w-7xl space-y-8">
@@ -134,7 +142,7 @@ export default function Dashboard() {
         <section>
           <h2 className="mb-4 text-2xl font-bold text-slate-900">Latest AQI Predictions</h2>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {cards.map((card) => (
+            {sortedCards.map((card) => (
               <PredictionCard key={card.city} data={card} />
             ))}
           </div>
