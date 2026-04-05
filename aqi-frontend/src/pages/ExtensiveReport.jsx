@@ -16,16 +16,27 @@ import {
     YAxis,
     ZAxis
 } from "recharts"
-import { getExtensiveReport } from "../services/api"
+import { getExtensiveReport, getLatestPredictions } from "../services/api"
 
-const categoryColor = {
-    Good: "#22c55e",
-    Moderate: "#facc15",
-    "Unhealthy for Sensitive Groups": "#f97316",
-    Unhealthy: "#ef4444",
-    "Very Unhealthy": "#8b5cf6",
-    Hazardous: "#7f1d1d"
+const getAqiColor = (aqi) => {
+    if (aqi <= 50) return "#00B050"
+    if (aqi <= 100) return "#92D050"
+    if (aqi <= 200) return "#FFFF00"
+    if (aqi <= 300) return "#FFC000"
+    if (aqi <= 400) return "#FF0000"
+    return "#C00000"
 }
+
+const getAqiLabel = (aqi) => {
+    if (aqi <= 50) return "Good"
+    if (aqi <= 100) return "Satisfactory"
+    if (aqi <= 200) return "Moderate"
+    if (aqi <= 300) return "Poor"
+    if (aqi <= 400) return "Very Poor"
+    return "Severe"
+}
+
+const getChartWidth = (count) => Math.max(760, count * 140)
 
 const round2 = (value) => {
     if (value === null || value === undefined) return "-"
@@ -43,8 +54,27 @@ export default function ExtensiveReport() {
             try {
                 setLoading(true)
                 setError("")
-                const res = await getExtensiveReport()
-                setData(res)
+                const [reportRows, latestRows] = await Promise.all([
+                    getExtensiveReport(),
+                    getLatestPredictions()
+                ])
+
+                const latestByCity = new Map(latestRows.map((row) => [row.city, row]))
+
+                setData(
+                    reportRows.map((row) => {
+                        const latest = latestByCity.get(row.city) || {}
+
+                        return {
+                            ...row,
+                            predicted_pm25: row.predicted_pm25 ?? latest.predicted_pm25 ?? null,
+                            aqi: row.aqi ?? latest.aqi ?? null,
+                            category: row.category ?? latest.category ?? null,
+                            color: row.color ?? latest.color ?? null,
+                            predicted_for: row.predicted_for ?? latest.predicted_for ?? null
+                        }
+                    })
+                )
             } catch {
                 setError("Could not load extensive report data.")
             } finally {
@@ -82,6 +112,8 @@ export default function ExtensiveReport() {
         [data]
     )
 
+    const cityChartWidth = useMemo(() => getChartWidth(cityAqiData.length), [cityAqiData.length])
+
     const lagTrendData = useMemo(() => {
         if (!selectedRow) return []
 
@@ -95,12 +127,20 @@ export default function ExtensiveReport() {
         () =>
             data.map((row) => ({
                 city: row.city,
-                predicted_pm25: row.predicted_pm25,
-                pm25_roll_mean: row.pm25_roll_mean,
-                aqi: row.aqi
+                predicted_pm25:
+                    row.predicted_pm25 === null || row.predicted_pm25 === undefined
+                        ? null
+                        : Number(row.predicted_pm25),
+                pm25_roll_mean:
+                    row.pm25_roll_mean === null || row.pm25_roll_mean === undefined
+                        ? null
+                        : Number(row.pm25_roll_mean),
+                aqi: row.aqi === null || row.aqi === undefined ? null : Number(row.aqi)
             })),
         [data]
     )
+
+    const mixChartWidth = useMemo(() => getChartWidth(cityAirMixData.length), [cityAirMixData.length])
 
     if (loading) {
         return <div className="p-8 text-slate-700">Loading report insights...</div>
@@ -144,44 +184,63 @@ export default function ExtensiveReport() {
                     <div className="rounded-2xl bg-white p-5 shadow-xl ring-1 ring-slate-200">
                         <h2 className="text-lg font-bold text-slate-900">City AQI Comparison</h2>
                         <p className="mb-4 text-sm text-slate-500">Bars are colored by category severity.</p>
-                        <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={cityAqiData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="city" interval={0} angle={-25} textAnchor="end" height={70} />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Bar dataKey="aqi" name="AQI">
-                                        {cityAqiData.map((row) => (
-                                            <Cell
-                                                key={row.city}
-                                                fill={categoryColor[row.category] || "#0ea5e9"}
-                                            />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                        <div className="overflow-x-auto">
+                            <div className="h-80" style={{ minWidth: `${cityChartWidth}px` }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={cityAqiData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="city" interval={0} angle={-25} textAnchor="end" height={70} />
+                                        <YAxis />
+                                        <Tooltip
+                                            formatter={(value, name, props) => [
+                                                value === null || value === undefined
+                                                    ? "-"
+                                                    : name === "AQI"
+                                                        ? `${Number(value).toFixed(2)} (${getAqiLabel(props.payload.aqi)})`
+                                                        : Number(value).toFixed(2),
+                                                name
+                                            ]}
+                                        />
+                                        <Bar dataKey="aqi" name="AQI">
+                                            {cityAqiData.map((row) => (
+                                                <Cell
+                                                    key={row.city}
+                                                    fill={getAqiColor(row.aqi)}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
 
                     <div className="rounded-2xl bg-white p-5 shadow-xl ring-1 ring-slate-200">
                         <h2 className="text-lg font-bold text-slate-900">PM2.5 Signal Mix by City</h2>
                         <p className="mb-4 text-sm text-slate-500">
-                            Compare prediction output vs rolling mean baseline, with AQI trend overlay.
+                            Compare predicted PM2.5, rolling mean baseline, and AQI on separate scales.
                         </p>
-                        <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <ComposedChart data={cityAirMixData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="city" interval={0} angle={-25} textAnchor="end" height={70} />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Bar dataKey="predicted_pm25" fill="#14b8a6" name="Predicted PM2.5" />
-                                    <Bar dataKey="pm25_roll_mean" fill="#60a5fa" name="7D PM2.5 Mean" />
-                                    <Line type="monotone" dataKey="aqi" stroke="#0f172a" strokeWidth={2.5} name="AQI" />
-                                </ComposedChart>
-                            </ResponsiveContainer>
+                        <div className="overflow-x-auto">
+                            <div className="h-80" style={{ minWidth: `${mixChartWidth}px` }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={cityAirMixData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="city" interval={0} angle={-25} textAnchor="end" height={70} />
+                                        <YAxis yAxisId="left" tickFormatter={(value) => `${value}`} />
+                                        <YAxis yAxisId="right" orientation="right" />
+                                        <Tooltip
+                                            formatter={(value, name) => [
+                                                value === null || value === undefined ? "-" : Number(value).toFixed(2),
+                                                name
+                                            ]}
+                                        />
+                                        <Legend />
+                                        <Bar yAxisId="left" dataKey="predicted_pm25" fill="#14b8a6" name="Predicted PM2.5" />
+                                        <Bar yAxisId="left" dataKey="pm25_roll_mean" fill="#60a5fa" name="7D PM2.5 Mean" />
+                                        <Line yAxisId="right" type="monotone" dataKey="aqi" stroke="#0f172a" strokeWidth={2.5} name="AQI" />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
 
@@ -218,9 +277,7 @@ export default function ExtensiveReport() {
 
                     <div className="rounded-2xl bg-white p-5 shadow-xl ring-1 ring-slate-200">
                         <h2 className="text-lg font-bold text-slate-900">Humidity vs AQI</h2>
-                        <p className="mb-4 text-sm text-slate-500">
-                            Bubble size reflects 7-day PM2.5 volatility (std dev).
-                        </p>
+                        <p className="mb-4 text-sm text-slate-500">Bubble size reflects 7-day PM2.5 volatility (std dev).</p>
                         <div className="h-80">
                             <ResponsiveContainer width="100%" height="100%">
                                 <ScatterChart>
@@ -247,6 +304,7 @@ export default function ExtensiveReport() {
                                     <th className="px-3 py-2">Category</th>
                                     <th className="px-3 py-2">Pred PM2.5</th>
                                     <th className="px-3 py-2">7D Mean</th>
+                                    <th className="px-3 py-2">PM2.5 Std</th>
                                     <th className="px-3 py-2">Temp L1</th>
                                     <th className="px-3 py-2">Humidity L1</th>
                                 </tr>
@@ -256,9 +314,10 @@ export default function ExtensiveReport() {
                                     <tr key={row.city} className="border-b border-slate-100">
                                         <td className="px-3 py-2 font-semibold text-slate-900">{row.city}</td>
                                         <td className="px-3 py-2">{round2(row.aqi)}</td>
-                                        <td className="px-3 py-2">{row.category}</td>
+                                        <td className="px-3 py-2">{row.category || getAqiLabel(row.aqi)}</td>
                                         <td className="px-3 py-2">{round2(row.predicted_pm25)}</td>
                                         <td className="px-3 py-2">{round2(row.pm25_roll_mean)}</td>
+                                        <td className="px-3 py-2">{round2(row.pm25_roll_std)}</td>
                                         <td className="px-3 py-2">{round2(row.temp_lag_1)}</td>
                                         <td className="px-3 py-2">{round2(row.humidity_lag_1)}</td>
                                     </tr>
